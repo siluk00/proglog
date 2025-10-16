@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"sort"
@@ -136,6 +137,64 @@ func (l *Log) Reset() error {
 	}
 
 	return l.setup()
+}
+
+func (l *Log) LowestOffset() (uint64, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.segments[0].baseOffset, nil
+}
+
+func (l *Log) HighestOffset() (uint64, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	off := l.segments[len(l.segments)-1].nextOffset
+	if off == 0 {
+		return 0, nil
+	}
+	return off - 1, nil
+}
+
+func (l *Log) Truncate(lowest uint64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var segments []*segment
+	for _, s := range l.segments {
+		if s.nextOffset >= lowest+1 {
+			if err := s.Remove(); err != nil {
+				return err
+			}
+
+			continue
+		}
+		segments = append(segments, s)
+	}
+
+	l.segments = segments
+	return nil
+}
+
+func (l *Log) Reader() io.Reader {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	readers := make([]io.Reader, len(l.segments))
+
+	for i, segment := range l.segments {
+		readers[i] = &originReader{segment.store, 0}
+	}
+
+	return io.MultiReader(readers...)
+}
+
+type originReader struct {
+	*store
+	off int64
+}
+
+func (o *originReader) Read(p []byte) (int, error) {
+	n, err := o.ReadAt(p, o.off)
+	o.off += int64(n)
+	return n, err
 }
 
 // Creates a new segment, appends it to the segment list of the log and sets it up to the current segment
