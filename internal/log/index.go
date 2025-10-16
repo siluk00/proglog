@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	offfWidth uint64 = 4
-	posWidth  uint64 = 8
-	entWidth         = offfWidth + posWidth
+	offWidth uint64 = 4
+	posWidth uint64 = 8
+	entWidth        = offWidth + posWidth
 )
 
 type index struct {
@@ -73,8 +73,8 @@ func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
 		return 0, 0, io.EOF
 	}
 
-	out = enc.Uint32(i.mmap[pos : pos+offfWidth])
-	pos = enc.Uint64(i.mmap[pos+offfWidth : pos+entWidth])
+	out = enc.Uint32(i.mmap[pos : pos+offWidth])
+	pos = enc.Uint64(i.mmap[pos+offWidth : pos+entWidth])
 	return out, pos, nil
 }
 
@@ -83,8 +83,8 @@ func (i *index) Write(off uint32, pos uint64) error {
 		return io.EOF
 	}
 
-	enc.PutUint32(i.mmap[i.size:i.size+offfWidth], off)
-	enc.PutUint64(i.mmap[i.size+offfWidth:i.size+entWidth], pos)
+	enc.PutUint32(i.mmap[i.size:i.size+offWidth], off)
+	enc.PutUint64(i.mmap[i.size+offWidth:i.size+entWidth], pos)
 	i.size += uint64(entWidth)
 	return nil
 }
