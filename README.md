@@ -10,3 +10,5 @@ install grpc and protobuf plugin:
 go get -u google.golang.org/grpc
 go get google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
+compile .proto:
+make compile
