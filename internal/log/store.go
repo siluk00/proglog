@@ -36,7 +36,7 @@ func newStore(f *os.File) (*store, error) {
 	}, nil
 }
 
-// Append p to the buffer
+// Append p to the buffer and returns the size of p plus 8 lenWidth bytes and the position in which p was written
 func (s *store) Append(p []byte) (n uint64, pos uint64, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,6 +75,7 @@ func (s *store) Read(pos uint64) ([]byte, error) {
 	return b, nil
 }
 
+// The function ReadAt flushes the buffer and reads the content of s with offset off at p
 func (s *store) ReadAt(p []byte, off int64) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
