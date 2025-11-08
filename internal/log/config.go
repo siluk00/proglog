@@ -7,3 +7,6 @@ type Config struct {
 		InitialOffset uint64
 	}
 }
+
+type C struct {
+}
