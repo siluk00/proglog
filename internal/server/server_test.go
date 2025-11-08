@@ -6,12 +6,14 @@ import (
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	api "github.com/siluk00/proglog/api/v1"
 	"github.com/siluk00/proglog/internal/auth"
 	"github.com/siluk00/proglog/internal/config"
 	"github.com/siluk00/proglog/internal/log"
 	"github.com/stretchr/testify/require"
+	"go.opencensus.io/examples/exporter"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -19,7 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var debug = flag.Bool("debig", false, "Enable observability for debugging")
+var debug = flag.Bool("debug", false, "Enable observability for debugging")
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -99,6 +101,28 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 	authorizer, err := auth.New(config.ACLModelFile, config.ACLPolicyFile)
 	require.NoError(t, err)
 
+	var telemetryExporter *exporter.LogExporter
+	if *debug {
+		metricsLogFile, err := os.CreateTemp("", "metrics-*.log")
+		require.NoError(t, err)
+		t.Logf("metrics log file: %s", metricsLogFile.Name())
+
+		tracesLogFile, err := os.CreateTemp("", "traces-*.log")
+		require.NoError(t, err)
+		t.Logf("traces log file: %s", tracesLogFile.Name())
+
+		telemetryExporter, err := exporter.NewLogExporter(
+			exporter.Options{
+				MetricsLogFile:    metricsLogFile.Name(),
+				TracesLogFile:     tracesLogFile.Name(),
+				ReportingInterval: time.Second,
+			},
+		)
+		require.NoError(t, err)
+		err = telemetryExporter.Start()
+		require.NoError(t, err)
+	}
+
 	cfg = &Config{
 		CommitLog:  clog,
 		Authorizer: authorizer,
@@ -118,6 +142,11 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 		rootConn.Close()
 		nobodyConn.Close()
 		l.Close()
+		if telemetryExporter != nil {
+			time.Sleep(1500 * time.Millisecond)
+			telemetryExporter.Stop()
+			telemetryExporter.Close()
+		}
 	}
 
 }
