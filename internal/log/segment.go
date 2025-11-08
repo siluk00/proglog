@@ -16,6 +16,7 @@ type segment struct {
 	config                 Config
 }
 
+// Creates a new segment inside dir and creates/appends to baseOffset.store and creates baseOffset.index
 func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	s := &segment{
 		baseOffset: baseOffset,

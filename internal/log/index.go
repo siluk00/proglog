@@ -19,6 +19,7 @@ type index struct {
 	size uint64
 }
 
+// creates new index with specified file f 
 func newIndex(f *os.File, c Config) (*index, error) {
 	idx := &index{
 		file: f,

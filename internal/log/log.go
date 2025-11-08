@@ -22,7 +22,7 @@ type Log struct {
 	segments      []*segment
 }
 
-// Creates a new log
+// Creates a new log and sets it up with the segments contained in dir
 func NewLog(dir string, c Config) (*Log, error) {
 	if c.Segment.MaxStoreBytes == 0 {
 		c.Segment.MaxStoreBytes = 1024

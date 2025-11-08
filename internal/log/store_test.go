@@ -89,6 +89,7 @@ func TestStoreClose(t *testing.T) {
 
 }
 
+
 func openFile(name string) (file *os.File, size int64, err error) {
 	f, err := os.OpenFile(name, os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
@@ -102,3 +103,5 @@ func openFile(name string) (file *os.File, size int64, err error) {
 
 	return f, fi.Size(), nil
 }
+
+
