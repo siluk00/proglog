@@ -21,6 +21,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Config has a CommitLog(an interface for appending and reading from a log)
+// and an Authorizer (an interface with an Authorize method)
+// authorizing s.o of doing s.t with some object
 type Config struct {
 	CommitLog  CommitLog
 	Authorizer Authorizer

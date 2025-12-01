@@ -11,6 +11,10 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	var err error
 	tlsConfig := &tls.Config{}
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
+		// Loads certificate (public key + signature) + Private key
+		// The function LoadX509Keypair checks and parses the pem files
+		// It validates the certificate and provate key pem files
+		// returns a tls.Certificate ready to be used
 		tlsConfig.Certificates = make([]tls.Certificate, 1)
 		tlsConfig.Certificates[0], err = tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
@@ -24,6 +28,7 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 			return nil, err
 		}
 
+		// Creates an empty trust store and appends cfg.CAFile to tthe store
 		ca := x509.NewCertPool()
 		ok := ca.AppendCertsFromPEM([]byte(b))
 		if !ok {
@@ -31,9 +36,12 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 		}
 
 		if cfg.Server {
+			// Server only trusts clients whose certificates are signed by CAs in this ca pool
+			// Server requires a certificate from client
 			tlsConfig.ClientCAs = ca
 			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 		} else {
+			// Client only trust servers whose certificates are signed by CAs in this ca pool
 			tlsConfig.RootCAs = ca
 		}
 

@@ -55,13 +55,24 @@ func TestServer(t *testing.T) {
 	}
 }
 
-func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.LogClient, cfg *Config, teardown func()) {
+// sets up a complete test environment with:
+// 1. A grpc server running on localhost with TLS
+// 2. Two clients  with different certificates
+// 3. A clean up function to stop everything after the test
+func setupTest(t *testing.T, fn func(*Config)) (
+	rootClient, nobodyClient api.LogClient, // Two client instances with different privileges
+	cfg *Config, //Server Configuration
+	teardown func(), // Cleanup function
+) {
 	t.Helper()
 
+	// Create a TCP listener on localhost with random port (the 0 means to let the OS choose the port)
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
+	// Helper function that allows to create a grpc client with specific TLS credentials
 	newClient := func(crtPath, keyPath string) (*grpc.ClientConn, api.LogClient, []grpc.DialOption) {
+		// Client certificate, client private key, CAFile to verify server
 		tlsConfig, err := config.SetupTLSConfig(config.TLSConfig{
 			CertFile: crtPath,
 			KeyFile:  keyPath,
@@ -69,19 +80,27 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 			Server:   false,
 		})
 		require.NoError(t, err)
+		// Wraps the tls.config to grpc-ready credentials
 		tlsCreds := credentials.NewTLS(tlsConfig)
+		// Configure dial options: using tls for secure connection
 		opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
+		// asks for connection to the server listener with opts above l.Addr().String() returns the actual address
 		conn, err := grpc.NewClient(l.Addr().String(), opts...)
 		require.NoError(t, err)
+
+		// creates the log service client
 		client := api.NewLogClient(conn)
 		return conn, client, opts
 	}
 
+	// create root client that has admin privileges
 	var rootConn *grpc.ClientConn
 	rootConn, rootClient, _ = newClient(config.RootClientCertFile, config.RootClientKeyFile)
+	//create nobody client with no privileges
 	var nobodyConn *grpc.ClientConn
 	nobodyConn, nobodyClient, _ = newClient(config.NobodyClientCertFile, config.NobodyClientKeyFile)
 
+	// configure TLS for the server
 	serverTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
 		CertFile:      config.ServerCertFile,
 		KeyFile:       config.ServerKeyFile,
@@ -90,17 +109,23 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 		Server:        true,
 	})
 	require.NoError(t, err)
+	// wraps configuration into tls credentials
 	serverCreds := credentials.NewTLS(serverTLSConfig)
 
+	// temp dir for test isolation
 	dir, err := os.MkdirTemp("", "server-test")
 	require.NoError(t, err)
 
+	// Initialize log
 	clog, err := log.NewLog(dir, log.Config{})
 	require.NoError(t, err)
 
+	// Initialize the authorizer
+	// Use casbin model and policy files
 	authorizer, err := auth.New(config.ACLModelFile, config.ACLPolicyFile)
 	require.NoError(t, err)
 
+	// Sets up telemetry exporter for debugging
 	var telemetryExporter *exporter.LogExporter
 	if *debug {
 		metricsLogFile, err := os.CreateTemp("", "metrics-*.log")
@@ -123,20 +148,25 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 		require.NoError(t, err)
 	}
 
+	// Build server configuration
 	cfg = &Config{
 		CommitLog:  clog,
 		Authorizer: authorizer,
 	}
+	// aply any custom configurations
 	if fn != nil {
 		fn(cfg)
 	}
+	// creates a grpc server with tls credentials
 	server, err := NewGRPCServer(cfg, grpc.Creds(serverCreds))
 	require.NoError(t, err)
 
+	// start server in goroutine for non-blocking
 	go func() {
 		server.Serve(l)
 	}()
 
+	// returns clients, configuration and cleanup function
 	return rootClient, nobodyClient, cfg, func() {
 		server.Stop()
 		rootConn.Close()
@@ -152,16 +182,21 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 }
 
 func testProduceConsume(t *testing.T, client, _ api.LogClient, config *Config) {
+	// creates context for cancellation
 	ctx := context.Background()
+	// Creates a test record to write
 	want := &api.Record{
 		Value: []byte("hello world"),
 	}
 
+	// Write record to log
 	produce, err := client.Produce(ctx, &api.ProduceRequest{Record: want})
 	require.NoError(t, err)
 
+	// read recording back using offset returned
 	consume, err := client.Consume(ctx, &api.ConsumeRequest{Offset: produce.Offset})
 	require.NoError(t, err)
+	// What we read matches what we wrote?
 	require.Equal(t, want.Value, consume.Record.Value)
 	require.Equal(t, want.Offset, consume.Record.Offset)
 }
